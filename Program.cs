@@ -4,6 +4,7 @@ using System.Text;
 using System.Xml.Linq;
 using iTextSharp.text.pdf;
 #if DEBUG
+using System.Diagnostics;
 using Serilog;
 #endif
 
@@ -11,6 +12,8 @@ namespace GenUuid;
 
 public static class ExtractUuid
 {
+  private static char[] TRIM_CHAR = new char[] { '{', '[', ']', '}' };
+  /// <summary>
   /// Извлечение UUID из подходящей строки
   /// </summary>
   /// <param name="s">Строка</param>
@@ -295,6 +298,11 @@ public static class ExtractUuid
     }
     else
     {
+#if DEBUG
+      Stopwatch sw = new();
+      Log.Information("BEGIN");
+      sw.Start();
+#endif
       foreach (var file in args)
         try
         {
@@ -307,6 +315,9 @@ public static class ExtractUuid
           Log.Warning(e.Message);
 #endif
         }
+#if DEBUG
+      Log.Information($"END (TIME: {sw.ElapsedMilliseconds} ms)");
+#endif
     }
   }
 
@@ -348,7 +359,7 @@ public static class ExtractUuid
   }
 
   /// <summary>
-  /// Извлечение UUID из ПДФ
+  /// Извлечение UUID из PDF
   /// </summary>
   /// <param name="stream">Поток</param>
   /// <returns>Результат</returns>
@@ -420,7 +431,6 @@ public static class ExtractUuid
   /// <returns>Результат</returns>
   public static Guid Fb2(Stream stream)
   {
-    Guid? result = null;
     //Пробуем взять из /FictionBook/description/document-info/id
     try
     {
@@ -431,13 +441,40 @@ public static class ExtractUuid
           ?.Element(fb2 + "document-info")
           ?.Element(fb2 + "id")
           ?.Value;
-      //Собственно, тут возможны варианты, но я их пока не учитываю
-      if (!string.IsNullOrWhiteSpace(fb2Id))
+      if (!string.IsNullOrWhiteSpace(fb2Id) && fb2Id.Length > 31)
       {
 #if DEBUG
         Log.Information($"FB2 id <<{fb2Id}>>");
 #endif
-        result = Guid.Parse(fb2Id);
+        if (Guid.TryParse(fb2Id, out Guid try1)) return try1;
+
+        string trimmedString = fb2Id.Trim(TRIM_CHAR);
+#if DEBUG
+        Log.Information($"FB2 id2 <<{trimmedString}>>");
+#endif
+        if (trimmedString.Length > 31 && Guid.TryParse(trimmedString, out Guid try2))
+          return try2;
+
+        string cleanString = trimmedString.Replace("-", null);
+#if DEBUG
+        Log.Information($"FB2 id3 <<{cleanString}>>");
+#endif
+        if (cleanString.Length == 32 && Guid.TryParse(cleanString, out Guid try3))
+          return try3;
+
+        int firstHyphen = trimmedString.IndexOf('-');
+        string? subString = null;
+        if (firstHyphen > -1)
+          subString = fb2Id.Substring(firstHyphen + 1).Replace("-", null);
+#if DEBUG
+        Log.Information($"FB2 id4 <<{subString}>>");
+#endif
+        if (subString?.Length == 32 && Guid.TryParse(subString, out Guid try4))
+        {
+          Console.WriteLine(42);
+          return try4;
+        }
+
       }
     }
     catch (Exception e)
@@ -445,9 +482,8 @@ public static class ExtractUuid
 #if DEBUG
       Log.Warning(e.Message);
 #endif
-      result = Default(stream);
     }
-    return (Guid)result;
+    return Default(stream);
   }
 
   /// <summary>
@@ -530,16 +566,18 @@ public static class ExtractUuid
   /// <returns>Результат</returns>
   public static Guid Default(Stream stream)
   {
+    // ???
     using var md5 = MD5.Create();
     var sum = md5.ComputeHash(stream);
+    var result = new Guid(ChangeByteOrder(sum));
 #if DEBUG
-    Log.Information($"Default md5sum");
+    Log.Information($"Default md5sum <<{result}>>");
 #endif
-    return new Guid(ChangeByteOrder(sum));
+    return result;
   }
 
   /// <summary>
-  /// Извлечение UUID из ПДФ
+  /// Извлечение UUID из PDF
   /// </summary>
   /// <param name="file">Имя файла</param>
   /// <returns>Результат</returns>
