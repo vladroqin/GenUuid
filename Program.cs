@@ -566,7 +566,7 @@ public static class ExtractUuid
   /// <returns>Результат</returns>
   public static Guid Default(Stream stream)
   {
-    // ???
+    stream.Seek(0, 0);
     using var md5 = MD5.Create();
     var sum = md5.ComputeHash(stream);
     var result = new Guid(ChangeByteOrder(sum));
