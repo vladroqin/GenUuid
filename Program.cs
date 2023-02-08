@@ -12,7 +12,19 @@ namespace GenUuid;
 
 public static class ExtractUuid
 {
-  private static char[] TRIM_CHAR = new char[] { '{', '[', ']', '}' };
+  private static readonly char[] TRIM_CHAR = new char[] { '{', '[', ']', '}' };
+  /* Еще можно добавить попытку извлечения для других форматов МС Офиса,
+   * но они либо его в готовом виде не содержат, либо встречаются крайне редко
+   * (у меня).
+   * Также можно добавить в будущем поддержку XPS, но по нему я дополнительно
+   * информации найти не смог :(. */
+  private static Dictionary<string, Func<Stream, Guid>> _opFuncDic = new(){
+    {".pdf", Pdf},
+    {".epub", Epub},
+    {".fb2", Fb2},
+    {".fbd", Fb2},
+    {".docx", Docx}};
+
   /// <summary>
   /// Извлечение UUID из подходящей строки
   /// </summary>
@@ -330,30 +342,13 @@ public static class ExtractUuid
   {
     var ext = Path.GetExtension(file).ToLowerInvariant();
     Guid uuid;
-    switch (ext)
+    if(_opFuncDic.TryGetValue(ext, out Func<Stream, Guid> f))
     {
-      case ".pdf":
-        uuid = DefAct(file, Pdf);
-        break;
-      case ".epub":
-        uuid = DefAct(file, Epub);
-        break;
-      case ".fbd":
-      case ".fb2":
-        uuid = DefAct(file, Fb2);
-        break;
-      //case ".docm":
-      /* Еще можно добавить попытку извлечения для других форматов МС Офиса,
-       * но они либо его в готовом виде не содержат, либо встречаются крайне редко
-       * (у меня).
-       * Также можно добавить в будущем поддержку XPS, но по нему я дополнительно
-       * информации найти не смог :(. */
-      case ".docx":
-        uuid = DefAct(file, Docx);
-        break;
-      default:
-        uuid = DefAct(file, Default);
-        break;
+      uuid = DefAct(file, f);
+    }
+    else
+    {
+      uuid = DefAct(file, Default);
     }
     return uuid;
   }
@@ -471,7 +466,6 @@ public static class ExtractUuid
 #endif
         if (subString?.Length == 32 && Guid.TryParse(subString, out Guid try4))
         {
-          Console.WriteLine(42);
           return try4;
         }
 
