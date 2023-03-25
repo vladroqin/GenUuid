@@ -97,7 +97,7 @@ public static class ExtractUuid
     if (!string.IsNullOrWhiteSpace(eid))
       Log.Information($"DOCX docId.w15 <<{eid}>>");
 #endif
-    if(Guid.TryParse(eid, out Guid result))
+    if (Guid.TryParse(eid, out Guid result))
       return result;
     else
       return null;
@@ -121,7 +121,29 @@ public static class ExtractUuid
     if (!string.IsNullOrWhiteSpace(eid))
       Log.Information($"DOCX Property fmtid <<{eid}>>");
 #endif
-    if(Guid.TryParse(eid, out Guid result))
+    if (Guid.TryParse(eid, out Guid result))
+      return result;
+    else
+      return null;
+  }
+
+  /// <summary>
+  /// Извлечение ещё одного нестандартного UUID из Docx
+  /// </summary>
+  /// <param name="stream">Поток</param>
+  /// <returns>Результат</returns>
+  private static Guid? DocxAnother(StreamReader stream)
+  {
+    var xdoc = XDocument.Load(stream);
+    XNamespace ds = "http://schemas.openxmlformats.org/officeDocument/2006/customXml";
+    var eid = xdoc?.Root
+    ?.Attribute(ds + "itemID")
+    ?.Value;
+#if DEBUG
+    if (!string.IsNullOrWhiteSpace(eid))
+      Log.Information($"DOCX Property itemID <<{eid}>>");
+#endif
+    if (Guid.TryParse(eid, out Guid result))
       return result;
     else
       return null;
@@ -342,7 +364,7 @@ public static class ExtractUuid
   {
     var ext = Path.GetExtension(file).ToLowerInvariant();
     Guid uuid;
-    if(_opFuncDic.TryGetValue(ext, out Func<Stream, Guid> f))
+    if (_opFuncDic.TryGetValue(ext, out Func<Stream, Guid> f))
     {
       uuid = DefAct(file, f);
     }
@@ -504,7 +526,7 @@ public static class ExtractUuid
       {
         var eid = XmlInZip(stream, content_opf, Content);
         if (eid != null)
-         return (Guid)eid;
+          return (Guid)eid;
         else throw new Exception();
       }
       catch (Exception e)
@@ -535,20 +557,34 @@ public static class ExtractUuid
       Log.Warning(e.Message);
 #endif
     }
-    if (result == default)
+    try
     {
-      try
+      if (result == default)
       {
         result = XmlInZip(stream, "docProps/custom.xml", DocxNS);
       }
-      catch (Exception e)
-      {
+    }
+    catch (Exception e)
+    {
 #if DEBUG
-        Log.Warning(e.Message);
+      Log.Warning(e.Message);
 #endif
+    }
+    try
+    {
+      if (result == default)
+      {
+        result = XmlInZip(stream, "customXml/itemProps1.xml", DocxAnother);
       }
     }
-    if(result == default)
+    catch (Exception e)
+    {
+#if DEBUG
+      Log.Warning(e.Message);
+#endif
+    }
+
+    if (result == default)
       result = Default(stream);
     return (Guid)result;
   }
