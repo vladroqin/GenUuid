@@ -384,60 +384,69 @@ public static class ExtractUuid
   public static Guid Pdf(Stream stream)
   {
     Guid? result = null;
-    using (var pdf = new PdfReader(stream))
+    Guid hack = Default(stream);
+    try
     {
-      /* Исхожу из того, что в файле есть метаинформация в XMP. Насколько
-       * я знаю UUID может быть в двух местах, но это знание получено
-       * получением имеющихся PDF, поэтому никаких дополнительных проверок
-       * не делаю, пусть лезут исключения - буду расширять свои знания. */
-      var xmpbin = pdf.Metadata;
-      if (xmpbin != null)
+      using (var pdf = new PdfReader(stream))
       {
-        var _ = new UTF8Encoding().GetString(xmpbin);
-        var xmlstr = _[0] != '\uFEFF' ? _ : _.Substring(1);
-        XNamespace xapMm = "http://ns.adobe.com/xap/1.0/mm/";
-        var xdoc = XDocument.Parse(xmlstr);
-        var docId = xdoc.Descendants(xapMm + "DocumentID");
-        if (docId.Count() > 0)
-          result = docId.First().Value.GetUuidFromString();
-        if (result == null)
+        /* Исхожу из того, что в файле есть метаинформация в XMP. Насколько
+         * я знаю UUID может быть в двух местах, но это знание получено
+         * получением имеющихся PDF, поэтому никаких дополнительных проверок
+         * не делаю, пусть лезут исключения - буду расширять свои знания. */
+        var xmpbin = pdf.Metadata;
+        if (xmpbin != null)
         {
-          XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-          try
+          var _ = new UTF8Encoding().GetString(xmpbin);
+          var xmlstr = _[0] != '\uFEFF' ? _ : _.Substring(1);
+          XNamespace xapMm = "http://ns.adobe.com/xap/1.0/mm/";
+          var xdoc = XDocument.Parse(xmlstr);
+          var docId = xdoc.Descendants(xapMm + "DocumentID");
+          if (docId.Count() > 0)
+            result = docId.First().Value.GetUuidFromString();
+          if (result == null)
           {
-            var preresult = xdoc?.Descendants(rdf + "Description")
-                ?.First(x => x.Attribute(xapMm + "DocumentID") != null)
-                ?.Attribute(xapMm + "DocumentID")
-                ?.Value;
+            XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+            try
+            {
+              var preresult = xdoc?.Descendants(rdf + "Description")
+                  ?.First(x => x.Attribute(xapMm + "DocumentID") != null)
+                  ?.Attribute(xapMm + "DocumentID")
+                  ?.Value;
 #if DEBUG
-            if (!string.IsNullOrWhiteSpace(preresult))
-              Log.Information($"PDF DocumentID <<{preresult}>>");
+              if (!string.IsNullOrWhiteSpace(preresult))
+                Log.Information($"PDF DocumentID <<{preresult}>>");
 #endif
-            result = preresult?.GetUuidFromString();
-          }
-          catch (Exception e)
-          {
+              result = preresult?.GetUuidFromString();
+            }
+            catch (Exception e)
+            {
 #if DEBUG
-            Log.Warning(e.Message);
+              Log.Warning(e.Message);
 #endif
+            }
           }
         }
-      }
-      //Если нет, то берём ID из трейлера
-      if (result == null && pdf.Trailer.GetAsArray(PdfName.ID) != null)
-      {
-        var pdfarr = pdf.Trailer.GetAsArray(PdfName.ID);
-        var preresult = ChangeByteOrder(pdfarr[0].GetBytes());
+        //Если нет, то берём ID из трейлера
+        if (result == null && pdf.Trailer.GetAsArray(PdfName.ID) != null)
+        {
+          var pdfarr = pdf.Trailer.GetAsArray(PdfName.ID);
+          var preresult = ChangeByteOrder(pdfarr[0].GetBytes());
 #if DEBUG
-        if (preresult != null && preresult.Count() != 0)
-          Log.Information($"PDF Trailer <<{BitConverter.ToString(preresult)}>>");
+          if (preresult != null && preresult.Count() != 0)
+            Log.Information($"PDF Trailer <<{BitConverter.ToString(preresult)}>>");
 #endif
-        result = new Guid(ChangeByteOrder(pdfarr[0].GetBytes()));
+          result = new Guid(ChangeByteOrder(pdfarr[0].GetBytes()));
+        }
       }
+    }
+    catch (Exception e) {
+#if DEBUG
+      Log.Debug(e.Message);
+#endif
     }
     //Если уж и здесь нет, считаем MD5
     if (result == null)
-      result = Default(stream);
+      return hack;
     return (Guid)result;
   }
 
