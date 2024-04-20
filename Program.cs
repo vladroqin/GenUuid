@@ -384,10 +384,10 @@ public static class ExtractUuid
   public static Guid Pdf(Stream stream)
   {
     Guid? result = null;
-    Guid hack = Default(stream);
+    PdfReader? pdf = null;
     try
     {
-      using (var pdf = new PdfReader(stream))
+      pdf = new PdfReader(stream);
       {
         /* Исхожу из того, что в файле есть метаинформация в XMP. Насколько
          * я знаю UUID может быть в двух местах, но это знание получено
@@ -397,11 +397,11 @@ public static class ExtractUuid
         if (xmpbin != null)
         {
           var _ = new UTF8Encoding().GetString(xmpbin);
-          var xmlstr = _[0] != '\uFEFF' ? _ : _.Substring(1);
+          var xmlstr = _[0] != '\uFEFF' ? _ : _[1..];
           XNamespace xapMm = "http://ns.adobe.com/xap/1.0/mm/";
           var xdoc = XDocument.Parse(xmlstr);
           var docId = xdoc.Descendants(xapMm + "DocumentID");
-          if (docId.Count() > 0)
+          if (docId.Any())
             result = docId.First().Value.GetUuidFromString();
           if (result == null)
           {
@@ -432,7 +432,7 @@ public static class ExtractUuid
           var pdfarr = pdf.Trailer.GetAsArray(PdfName.ID);
           var preresult = ChangeByteOrder(pdfarr[0].GetBytes());
 #if DEBUG
-          if (preresult != null && preresult.Count() != 0)
+          if (preresult != null && preresult.Length != 0)
             Log.Information($"PDF Trailer <<{BitConverter.ToString(preresult)}>>");
 #endif
           result = new Guid(ChangeByteOrder(pdfarr[0].GetBytes()));
@@ -444,10 +444,14 @@ public static class ExtractUuid
       Log.Debug(e.Message);
 #endif
     }
+    finally
+    {
+      pdf?.Dispose();
+    }
     //Если уж и здесь нет, считаем MD5
     if (result == null)
-      return hack;
-    return (Guid)result;
+      return Default(stream);
+    return result.Value;
   }
 
   /// <summary>
